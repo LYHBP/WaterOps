@@ -1,0 +1,28 @@
+[Unit]
+Description=PartyOps 基层党建工作闭环协同系统
+Wants=network-online.target
+After=network-online.target
+# 使用早期与当前 systemd 均接受的启动限流键。
+StartLimitInterval=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=partyops
+Group=partyops
+EnvironmentFile=-/etc/partyops/partyops.env
+Environment=PARTYOPS_ENVIRONMENT=production
+Environment=PARTYOPS_DATA_DIR=/var/lib/partyops
+Environment=PARTYOPS_STRICT_SQLITE=true
+Environment=PARTYOPS_SEED_DEMO=false
+ExecStart=/opt/partyops/partyops
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=30
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

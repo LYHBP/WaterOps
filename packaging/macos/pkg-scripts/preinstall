@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+# postinstall 会事务式替换 App；preinstall 只核验固定目标并停止受控进程，
+# 不提前删除旧版本。这样后续解包或签名检查失败时仍可恢复原 App。
+APP='/Applications/PartyOps.app'
+if [[ -e "$APP" ]]; then
+  if [[ -L "$APP" ]] || [[ ! -d "$APP" ]]; then
+    printf '%s\n' '[MACOS_EXISTING_APP_UNSAFE] /Applications/PartyOps.app 不是安全的应用目录。' >&2
+    exit 2
+  fi
+  INFO="$APP/Contents/Info.plist"
+  IDENTIFIER="$(/usr/bin/plutil -extract CFBundleIdentifier raw "$INFO" 2>/dev/null || true)"
+  if [[ "$IDENTIFIER" != 'cn.partyops.desktop' ]]; then
+    printf '%s\n' '[MACOS_EXISTING_APP_CONFLICT] 目标位置存在非 PartyOps 应用，拒绝覆盖。' >&2
+    exit 2
+  fi
+fi
+
+for process in partyops-desktop partyops partyops-wizard partyops-launch-agent partyops-updater; do
+  /usr/bin/pkill -TERM -x "$process" 2>/dev/null || true
+done
+/bin/sleep 1
+for process in partyops-desktop partyops partyops-wizard partyops-launch-agent partyops-updater; do
+  /usr/bin/pkill -KILL -x "$process" 2>/dev/null || true
+done
