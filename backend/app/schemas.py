@@ -115,6 +115,88 @@ class PasswordReset(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class WaterWorkCategoryIn(BaseModel):
+    code: str = Field(min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    name: str = Field(min_length=1, max_length=120)
+    sort_order: int = Field(default=0, ge=0, le=10_000)
+    active: bool = True
+
+
+class WaterWorkCategoryPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    sort_order: int | None = Field(default=None, ge=0, le=10_000)
+    active: bool | None = None
+
+
+class WaterWorkCategoryOut(ORMModel):
+    code: str
+    name: str
+    sort_order: int
+    active: bool
+    version: int
+
+
+class WaterWorkProjectIn(BaseModel):
+    category_code: str = Field(min_length=2, max_length=64)
+    name: str = Field(min_length=1, max_length=160)
+    frequency_hint: str = Field(default="", max_length=120)
+    archive_rule: str = Field(default="", max_length=240)
+    owner_hint: str = Field(default="", max_length=80)
+    sort_order: int = Field(default=0, ge=0, le=10_000)
+    active: bool = True
+
+
+class WaterWorkProjectPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    frequency_hint: str | None = Field(default=None, max_length=120)
+    archive_rule: str | None = Field(default=None, max_length=240)
+    owner_hint: str | None = Field(default=None, max_length=80)
+    sort_order: int | None = Field(default=None, ge=0, le=10_000)
+    active: bool | None = None
+
+
+class WaterWorkProjectOut(ORMModel):
+    id: str
+    category_code: str
+    name: str
+    frequency_hint: str
+    archive_rule: str
+    owner_hint: str
+    sort_order: int
+    active: bool
+    version: int
+
+
+class WaterWorkResourceIn(BaseModel):
+    category_code: str = Field(min_length=2, max_length=64)
+    project_id: str | None = None
+    resource_type: str = Field(pattern=r"^(policy|reference|attachment)$")
+    title: str = Field(min_length=1, max_length=240)
+    summary: str = Field(default="", max_length=10_000)
+    external_url: str = Field(default="", max_length=2048)
+
+
+class WaterWorkResourcePatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=240)
+    summary: str | None = Field(default=None, max_length=10_000)
+    external_url: str | None = Field(default=None, max_length=2048)
+    active: bool | None = None
+
+
+class WaterWorkResourceOut(ORMModel):
+    id: str
+    category_code: str
+    project_id: str | None
+    resource_type: str
+    title: str
+    summary: str
+    external_url: str
+    display_name: str
+    active: bool
+    version: int
+    created_at: datetime
+
+
 class StepInput(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     assignee_id: str | None = None

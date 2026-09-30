@@ -37,7 +37,7 @@ from .device_versions import (
     verify_device_context_token,
 )
 from .problems import install_problem_handlers
-from .routers import admin, ai, archives, auth, bootstrap, business, events, fleet, integration, operations, party_development, party_work, productivity, support, tasks, updates, workspace
+from .routers import admin, ai, archives, auth, bootstrap, business, events, fleet, integration, operations, party_development, party_work, productivity, support, tasks, updates, waterops, workspace
 from .scheduler import scheduler_loop
 from .seed import seed_templates
 from .models import User, utcnow
@@ -532,6 +532,7 @@ app.include_router(party_work.router, prefix=api_prefix)
 app.include_router(updates.router, prefix=api_prefix)
 app.include_router(bootstrap.router, prefix=api_prefix)
 app.include_router(integration.router, prefix=api_prefix)
+app.include_router(waterops.router, prefix=api_prefix)
 
 
 @app.get("/device-launch", include_in_schema=False)

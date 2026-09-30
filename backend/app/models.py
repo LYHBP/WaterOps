@@ -114,6 +114,75 @@ class SystemSetting(Base):
     )
 
 
+class WaterWorkCategory(Base):
+    """水务一级工作类别；代码稳定，显示名称可维护。"""
+
+    __tablename__ = "water_work_categories"
+
+    code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class WaterWorkProject(Base):
+    """台账工作项目，作为可维护数据而非前端硬编码。"""
+
+    __tablename__ = "water_work_projects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    category_code: Mapped[str] = mapped_column(
+        ForeignKey("water_work_categories.code"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160))
+    frequency_hint: Mapped[str] = mapped_column(String(120), default="")
+    archive_rule: Mapped[str] = mapped_column(String(240), default="")
+    owner_hint: Mapped[str] = mapped_column(String(80), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (UniqueConstraint("category_code", "name"),)
+
+
+class WaterWorkResource(Base):
+    """政策指引、参考文献和附件的公共资料目录。"""
+
+    __tablename__ = "water_work_resources"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    category_code: Mapped[str] = mapped_column(
+        ForeignKey("water_work_categories.code"), index=True
+    )
+    project_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("water_work_projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    resource_type: Mapped[str] = mapped_column(String(24), index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    external_url: Mapped[str] = mapped_column(String(2048), default="")
+    blob_sha256: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("file_blobs.sha256"), nullable=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class UserAppearancePreference(Base):
     """用户东方皮肤偏好；全局默认仍保存在 system_settings。"""
 
