@@ -8,6 +8,7 @@ import re
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
@@ -20,7 +21,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .models import AttachmentVersion, FileBlob, MaterialItem, Task, User
+from .models import (
+    AttachmentVersion,
+    FileBlob,
+    InventoryItem,
+    InventoryTransaction,
+    MaterialItem,
+    Task,
+    User,
+)
 from .schemas import serialize_api_datetime
 from .storage import resolve_blob_path
 from .spreadsheet_security import safe_spreadsheet_row
@@ -44,9 +53,121 @@ def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
+def _local_datetime(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    aware = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    return aware.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
+
+
 def _safe_name(value: str) -> str:
     cleaned = re.sub(r'[\\/:*?"<>|]+', "_", value).strip(" .")
     return cleaned[:80] or "未命名"
+
+
+def export_inventory_xlsx(db: Session) -> Path:
+    """导出防汛物资台账；库存与 API 共用确认流水口径。"""
+    settings = get_settings()
+    path = settings.exports_dir / f"WaterOps-M-05-防汛物资台账-{_stamp()}.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "库存及出入库台账"
+    sheet.append(["物资名称", "规格", "单位", "类别", "库位", "入库", "出库", "借出", "归还", "调整", "可用库存"])
+    header_fill = PatternFill("solid", fgColor="B42318")
+    for cell in sheet[1]:
+        cell.font = Font(color="FFFFFF", bold=True); cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    effects = {
+        "inbound": 1,
+        "return": 1,
+        "adjustment_in": 1,
+        "outbound": -1,
+        "loan": -1,
+        "adjustment_out": -1,
+    }
+    for item in db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all():
+        rows = db.scalars(
+            select(InventoryTransaction).where(
+                InventoryTransaction.item_id == item.id,
+                InventoryTransaction.status == "confirmed",
+            )
+        ).all()
+        totals = {
+            kind: sum(row.quantity for row in rows if row.transaction_type == kind)
+            for kind in effects
+        }
+        available = sum(effects[row.transaction_type] * row.quantity for row in rows)
+        sheet.append(
+            safe_spreadsheet_row(
+                [
+                    item.name,
+                    item.specification,
+                    item.unit,
+                    item.category,
+                    item.storage_location,
+                    totals["inbound"],
+                    totals["outbound"],
+                    totals["loan"],
+                    totals["return"],
+                    totals["adjustment_in"] - totals["adjustment_out"],
+                    available,
+                ]
+            )
+        )
+    for index, width in enumerate([28, 24, 10, 18, 22, 12, 12, 12, 12, 12, 14], 1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    sheet.freeze_panes = "A2"; sheet.auto_filter.ref = sheet.dimensions
+    workbook.save(path)
+    return path
+
+
+def export_inventory_form_xlsx(
+    item: InventoryItem,
+    transaction: InventoryTransaction,
+    form_code: str,
+    handler_name: str,
+) -> Path:
+    """按单条库存流水生成可归档的通用物资单据。"""
+    labels = {"M-01": "物资入库单", "M-02": "物资出库领用单"}
+    settings = get_settings()
+    path = settings.exports_dir / f"WaterOps-{form_code}-{_stamp()}-{transaction.id[:8]}.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = labels[form_code]
+    sheet.append([f"西集水务所{labels[form_code]}（通用模板，待甲方样表确认）"])
+    sheet.merge_cells("A1:B1")
+    sheet["A1"].font = Font(size=15, bold=True, color="17365D")
+    values = [
+        ("单据编号", transaction.document_no or transaction.id),
+        ("业务日期", _local_datetime(transaction.occurred_at)),
+        ("单据类型", labels[form_code]),
+        ("物资名称", item.name),
+        ("规格型号", item.specification),
+        ("计量单位", item.unit),
+        ("数量", transaction.quantity),
+        ("经办人", handler_name),
+        ("来源/领用单位", transaction.counterparty),
+        ("用途/事由", transaction.purpose),
+        ("预计归还", _local_datetime(transaction.expected_return_at)),
+        ("关联流水", transaction.related_transaction_id or ""),
+        ("备注", transaction.note),
+        ("状态", "有效" if transaction.status == "confirmed" else "已冲销"),
+        ("填表人签字", ""),
+        ("审核人签字", ""),
+        ("保管人签字", ""),
+    ]
+    for label, value in values:
+        sheet.append(safe_spreadsheet_row([label, value]))
+    sheet.column_dimensions["A"].width = 22
+    sheet.column_dimensions["B"].width = 58
+    for row in sheet.iter_rows(min_row=2):
+        row[0].font = Font(bold=True)
+        row[0].fill = PatternFill("solid", fgColor="EAF1F8")
+        row[0].alignment = Alignment(vertical="center")
+        row[1].alignment = Alignment(vertical="center", wrap_text=True)
+    sheet.freeze_panes = "A2"
+    workbook.save(path)
+    return path
 
 
 def _tasks_for_kind(db: Session, user: User, kind: str) -> list[Task]:
