@@ -109,7 +109,7 @@ def _signed_manifest(
         "version": VERSION,
         # 本版延续安装器内置信任根，只允许 rc.1 及以后直接使用系统内更新。
         "min_version": "1.4.5-rc.1",
-        "schema_revision": "0024",
+        "schema_revision": "0025",
         "release_title": "公文排版与协同可靠性升级",
         "target_platform": platform_name,
         "target_architecture": architecture,

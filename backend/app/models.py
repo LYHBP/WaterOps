@@ -10,6 +10,7 @@ from sqlalchemy import (
     BigInteger,
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -180,6 +181,76 @@ class WaterWorkResource(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class InventoryItem(Base):
+    """防汛物资档案；库存由确认流水计算，不保存可修改余额。"""
+
+    __tablename__ = "inventory_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    name: Mapped[str] = mapped_column(String(200), index=True)
+    specification: Mapped[str] = mapped_column(String(240), default="")
+    unit: Mapped[str] = mapped_column(String(32))
+    storage_location: Mapped[str] = mapped_column(String(160), default="", index=True)
+    category: Mapped[str] = mapped_column(String(32), default="flood_control", index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('government_reserve','flood_control')",
+            name="ck_inventory_items_category",
+        ),
+    )
+
+
+class InventoryTransaction(Base):
+    """不可原地修改的库存流水；更正只能冲销或新增调整流水。"""
+
+    __tablename__ = "inventory_transactions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("inventory_items.id", ondelete="RESTRICT"), index=True
+    )
+    transaction_type: Mapped[str] = mapped_column(String(24), index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    handler_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    counterparty: Mapped[str] = mapped_column(String(240), default="")
+    purpose: Mapped[str] = mapped_column(Text, default="")
+    document_no: Mapped[str] = mapped_column(String(100), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    related_transaction_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    expected_return_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="confirmed", index=True)
+    void_reason: Mapped[str] = mapped_column(Text, default="")
+    client_request_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, unique=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_inventory_transactions_quantity_positive"),
+        CheckConstraint(
+            "transaction_type IN ('inbound','outbound','loan','return','adjustment_in','adjustment_out')",
+            name="ck_inventory_transactions_type",
+        ),
+        CheckConstraint(
+            "status IN ('confirmed','voided')",
+            name="ck_inventory_transactions_status",
+        ),
     )
 
 

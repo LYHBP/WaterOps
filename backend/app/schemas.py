@@ -6,7 +6,7 @@ from datetime import date as dt_date, datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel as PydanticBaseModel
-from pydantic import ConfigDict, Field, field_serializer, field_validator
+from pydantic import ConfigDict, Field, field_serializer, field_validator, model_validator
 
 from .enums import (
     ArchiveAccessMode,
@@ -195,6 +195,97 @@ class WaterWorkResourceOut(ORMModel):
     active: bool
     version: int
     created_at: datetime
+
+
+class InventoryItemCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    specification: str = Field(default="", max_length=240)
+    unit: str = Field(min_length=1, max_length=32)
+    storage_location: str = Field(default="", max_length=160)
+    category: str = Field(default="flood_control", pattern=r"^(government_reserve|flood_control)$")
+
+
+class InventoryItemPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    specification: str | None = Field(default=None, max_length=240)
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
+    storage_location: str | None = Field(default=None, max_length=160)
+    category: str | None = Field(default=None, pattern=r"^(government_reserve|flood_control)$")
+    active: bool | None = None
+
+
+class InventoryItemOut(ORMModel):
+    id: str
+    name: str
+    specification: str
+    unit: str
+    storage_location: str
+    category: str
+    active: bool
+    version: int
+    available_quantity: int = 0
+
+
+class InventoryTransactionCreate(BaseModel):
+    item_id: str
+    transaction_type: str = Field(pattern=r"^(inbound|outbound|loan|return|adjustment_in|adjustment_out)$")
+    quantity: int = Field(gt=0, le=1_000_000)
+    occurred_at: datetime
+    counterparty: str = Field(default="", max_length=240)
+    purpose: str = Field(default="", max_length=2_000)
+    document_no: str = Field(default="", max_length=100)
+    note: str = Field(default="", max_length=2_000)
+    related_transaction_id: str | None = None
+    expected_return_at: datetime | None = None
+    client_request_id: str | None = Field(default=None, min_length=8, max_length=80)
+
+    @model_validator(mode="after")
+    def require_adjustment_reason(self):
+        if self.transaction_type in {"adjustment_in", "adjustment_out"} and not (
+            self.purpose.strip() or self.note.strip()
+        ):
+            raise ValueError("盘点调整必须填写差异原因")
+        return self
+
+
+class InventoryTransactionVoid(BaseModel):
+    reason: str = Field(min_length=1, max_length=1_000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_void_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("冲销原因不能为空")
+        return value
+
+
+class InventoryTransactionOut(ORMModel):
+    id: str
+    item_id: str
+    transaction_type: str
+    quantity: int
+    occurred_at: datetime
+    handler_id: str
+    counterparty: str
+    purpose: str
+    document_no: str
+    note: str
+    related_transaction_id: str | None
+    expected_return_at: datetime | None
+    status: str
+    void_reason: str
+    version: int
+
+
+class InventoryStockOut(BaseModel):
+    item: InventoryItemOut
+    inbound_quantity: int
+    outbound_quantity: int
+    loaned_quantity: int
+    returned_quantity: int
+    adjustment_quantity: int
+    available_quantity: int
 
 
 class StepInput(BaseModel):
